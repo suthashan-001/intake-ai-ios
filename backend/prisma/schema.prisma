@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  title         String?   // MD, ND, DO, etc.
+  practiceName  String?
+  phone         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  patients      Patient[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model Patient {
+  id          String   @id @default(cuid())
+  firstName   String
+  lastName    String
+  email       String
+  phone       String?
+  dateOfBirth DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  providerId  String
+  provider    User     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  intakeLinks IntakeLink[]
+  intakes     Intake[]
+
+  @@map("patients")
+}
+
+model IntakeLink {
+  id          String        @id @default(cuid())
+  token       String        @unique
+  patientId   String
+  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  status      LinkStatus    @default(PENDING)
+  expiresAt   DateTime
+  createdAt   DateTime      @default(now())
+
+  intake      Intake?
+
+  @@map("intake_links")
+}
+
+enum LinkStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+model Intake {
+  id              String       @id @default(cuid())
+  patientId       String
+  patient         Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  intakeLinkId    String       @unique
+  intakeLink      IntakeLink   @relation(fields: [intakeLinkId], references: [id], onDelete: Cascade)
+
+  // Form data stored as JSON
+  demographics    Json?
+  chiefComplaint  String?
+  medicalHistory  Json?
+  medications     Json?
+  allergies       Json?
+  socialHistory   Json?
+  reviewOfSystems Json?
+
+  status          IntakeStatus @default(READY_FOR_REVIEW)
+  completedAt     DateTime     @default(now())
+  reviewedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  redFlags        RedFlag[]
+  summaries       Summary[]
+
+  @@map("intakes")
+}
+
+enum IntakeStatus {
+  READY_FOR_REVIEW
+  REVIEWED
+}
+
+model RedFlag {
+  id          String      @id @default(cuid())
+  intakeId    String
+  intake      Intake      @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+  category    String      // e.g., "cardiac", "neurological"
+  description String
+  severity    FlagSeverity
+  source      String      // Which field triggered this
+  createdAt   DateTime    @default(now())
+
+  @@map("red_flags")
+}
+
+enum FlagSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Summary {
+  id          String   @id @default(cuid())
+  intakeId    String
+  intake      Intake   @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+  content     String   @db.Text
+  model       String   // e.g., "gemini-1.5-pro"
+  tokensUsed  Int?
+  generatedAt DateTime @default(now())
+
+  @@map("summaries")
+}
